@@ -1030,7 +1030,6 @@ cdef class Array(_PandasConvertible):
         with nogil:
             options = PrettyPrintOptions(indent, window)
             options.skip_new_lines = skip_new_lines
-            options.indent_size = indent_size
             check_status(
                 PrettyPrint(
                     deref(self.ap),
