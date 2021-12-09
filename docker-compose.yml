@@ -97,10 +97,12 @@ x-hierarchy:
   # service entry, so any new image/service must be listed here.
   - conda:
     - conda-cpp:
+      - conda-integration
       - conda-cpp-hiveserver2
       - conda-cpp-valgrind
       - conda-python:
-        - conda-python-pandas
+        - conda-python-pandas:
+          - conda-python-docs
         - conda-python-dask
         - conda-python-hdfs
         - conda-python-jpype
@@ -108,7 +110,6 @@ x-hierarchy:
         - conda-python-turbodbc
         - conda-python-kartothek
         - conda-python-spark
-    - conda-integration
   - debian-cpp:
     - debian-c-glib:
       - debian-ruby
@@ -203,7 +204,6 @@ services:
         - ${REPO}:${ARCH}-conda
       args:
         arch: ${ARCH}
-        prefix: /opt/conda
     volumes:
       - .:/arrow:delegated
 
@@ -233,14 +233,16 @@ services:
       ARROW_BUILD_BENCHMARKS: "ON"
       ARROW_BUILD_EXAMPLES: "ON"
       ARROW_ENABLE_TIMING_TESTS:  # inherit
+      ARROW_EXTRA_ERROR_CONTEXT: "ON"
       ARROW_MIMALLOC: "ON"
       ARROW_USE_LD_GOLD: "ON"
       ARROW_USE_PRECOMPILED_HEADERS: "ON"
+      BUILD_DOCS_PYTHON: "ON"
     volumes: &conda-volumes
       - .:/arrow:delegated
       - ${DOCKER_VOLUME_PREFIX}conda-ccache:/ccache:delegated
     command:
-      ["/arrow/ci/scripts/cpp_build.sh /arrow /build true &&
+      ["/arrow/ci/scripts/cpp_build.sh /arrow /build &&
         /arrow/ci/scripts/cpp_test.sh /arrow /build"]
 
   conda-cpp-valgrind:
@@ -259,7 +261,6 @@ services:
       args:
         repo: ${REPO}
         arch: ${ARCH}
-        prefix: /opt/conda
     shm_size: *shm-size
     environment:
       <<: *ccache
@@ -514,7 +515,7 @@ services:
     ulimits: *ulimits
     environment:
       <<: *ccache
-      ARROW_GLIB_GTK_DOC: "true"
+      BUILD_DOCS_C_GLIB: "ON"
     volumes: *debian-volumes
     command: &c-glib-command >
       /bin/bash -c "
@@ -542,7 +543,6 @@ services:
     ulimits: *ulimits
     environment:
       <<: *ccache
-      ARROW_GLIB_GTK_DOC: "true"
     volumes: *ubuntu-volumes
     command: *c-glib-command
 
@@ -573,6 +573,7 @@ services:
     ulimits: *ulimits
     environment:
       <<: *ccache
+      BUILD_DOCS_C_GLIB: "ON"
     volumes: *debian-volumes
     command: &ruby-command >
       /bin/bash -c "
@@ -941,7 +942,31 @@ services:
     environment:
       <<: *ccache
     volumes: *conda-volumes
-    command: *python-conda-command
+    command:
+      ["/arrow/ci/scripts/cpp_build.sh /arrow /build &&
+        /arrow/ci/scripts/python_build.sh /arrow /build &&
+        /arrow/ci/scripts/python_test.sh /arrow"]
+
+  conda-python-docs:
+    # Usage:
+    #   archery docker run conda-python-docs
+    #
+    # Only a single rule is enabled for now to check undocumented arguments.
+    # We should extend the list of enabled rules after adding this build to
+    # the CI pipeline.
+    image: ${REPO}:${ARCH}-conda-python-${PYTHON}-pandas-${PANDAS}
+    environment:
+      <<: *ccache
+      LC_ALL: "C.UTF-8"
+      LANG: "C.UTF-8"
+      BUILD_DOCS_CPP: "ON"
+      BUILD_DOCS_PYTHON: "ON"
+    volumes: *conda-volumes
+    command:
+      ["/arrow/ci/scripts/cpp_build.sh /arrow /build &&
+        /arrow/ci/scripts/python_build.sh /arrow /build &&
+        pip install -e /arrow/dev/archery[numpydoc] &&
+        archery numpydoc --allow-rule PR01"]
 
   conda-python-dask:
     # Possible $DASK parameters:
@@ -1289,8 +1314,6 @@ services:
     command: >
       /bin/bash -c "/arrow/ci/scripts/r_revdepcheck.sh /arrow"
 
-
-
   ################################# Go ########################################
 
   debian-go:
@@ -1366,9 +1389,11 @@ services:
         node: ${NODE}
     shm_size: *shm-size
     volumes: *debian-volumes
+    environment:
+      BUILD_DOCS_JS: "ON"
     command: &js-command >
       /bin/bash -c "
-        /arrow/ci/scripts/js_build.sh /arrow &&
+        /arrow/ci/scripts/js_build.sh /arrow /build &&
         /arrow/ci/scripts/js_test.sh /arrow"
 
   #################################### C# #####################################
@@ -1507,18 +1532,22 @@ services:
     environment:
       <<: *ccache
       ARROW_CUDA: "ON"
-      ARROW_GLIB_GTK_DOC: "true"
+      BUILD_DOCS_C_GLIB: "ON"
+      BUILD_DOCS_CPP: "ON"
+      BUILD_DOCS_JAVA: "ON"
+      BUILD_DOCS_JS: "ON"
+      BUILD_DOCS_PYTHON: "ON"
+      BUILD_DOCS_R: "ON"
       Protobuf_SOURCE: "BUNDLED"  # Need Protobuf >= 3.15
     volumes: *ubuntu-volumes
     command: &docs-command >
       /bin/bash -c "
-        /arrow/ci/scripts/cpp_build.sh /arrow /build true &&
+        /arrow/ci/scripts/cpp_build.sh /arrow /build &&
         /arrow/ci/scripts/c_glib_build.sh /arrow /build &&
         /arrow/ci/scripts/python_build.sh /arrow /build &&
-        /arrow/ci/scripts/java_build.sh /arrow /build true &&
-        /arrow/ci/scripts/js_build.sh /arrow true &&
-        /arrow/ci/scripts/r_build.sh /arrow true &&
-        /arrow/ci/scripts/docs_build.sh /arrow /build"
+        /arrow/ci/scripts/r_build.sh /arrow /build &&
+        /arrow/ci/scripts/js_build.sh /arrow /build &&
+        /arrow/ci/scripts/java_build.sh /arrow /build"
 
   ################################# Tools #####################################
 

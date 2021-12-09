@@ -281,8 +281,10 @@ struct RandomDataTypeConstraints {
 
   void OnlyInt(int int_size, bool allow_nulls) {
     Default();
-    data_type_enabled_mask =
-        int_size == 8 ? kInt8 : int_size == 4 ? kInt4 : int_size == 2 ? kInt2 : kInt1;
+    data_type_enabled_mask = int_size == 8   ? kInt8
+                             : int_size == 4 ? kInt4
+                             : int_size == 2 ? kInt2
+                                             : kInt1;
     if (!allow_nulls) {
       max_null_probability = 0.0;
     }
@@ -936,7 +938,11 @@ void HashJoinWithExecPlan(Random64Bit& rng, bool parallel,
 
 TEST(HashJoin, Random) {
   Random64Bit rng(42);
-  int num_tests = 100;
+#if defined(THREAD_SANITIZER)
+  const int num_tests = 15;
+#else
+  const int num_tests = 100;
+#endif
   for (int test_id = 0; test_id < num_tests; ++test_id) {
     bool parallel = (rng.from_range(0, 1) == 1);
     auto exec_ctx = arrow::internal::make_unique<ExecContext>(
@@ -1166,12 +1172,12 @@ void TestHashJoinDictionaryHelper(
     int expected_num_r_no_match,
     // Whether to swap two inputs to the hash join
     bool swap_sides) {
-  int64_t l_length = l_key.is_array()
-                         ? l_key.array()->length
-                         : l_payload.is_array() ? l_payload.array()->length : -1;
-  int64_t r_length = r_key.is_array()
-                         ? r_key.array()->length
-                         : r_payload.is_array() ? r_payload.array()->length : -1;
+  int64_t l_length = l_key.is_array()       ? l_key.array()->length
+                     : l_payload.is_array() ? l_payload.array()->length
+                                            : -1;
+  int64_t r_length = r_key.is_array()       ? r_key.array()->length
+                     : r_payload.is_array() ? r_payload.array()->length
+                                            : -1;
   ARROW_DCHECK(l_length >= 0 && r_length >= 0);
 
   constexpr int batch_multiplicity_for_parallel = 2;
